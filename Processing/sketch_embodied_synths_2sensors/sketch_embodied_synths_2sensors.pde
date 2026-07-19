@@ -5,9 +5,9 @@
  * - receiving raw and smoothed values from a XIAO ESP32S3
  * - printing incoming values to the console
  * - tracking observed minimum and maximum values
- * - interactive calibration for each sensor
+ * - interactive calibration
  * - reporting whether the current value is below or above calibration
- * - mapping stretch to sine0-wave pitch
+ * - mapping stretch to sine-wave pitch
  *
  * Controls:
  * R = calibrate relaxed position
@@ -21,14 +21,14 @@ import processing.serial.*;
 import processing.sound.*;
 
 Serial myPort;
-SinOsc sine0;
-SinOsc sine1;
+SinOsc sine;
 
 // --------------------------------------------------
 // Serial and sensor values
 // --------------------------------------------------
-float rawValue0 = 0;
-float smoothedValue0 = 1780;
+
+float rawValue = 0;
+float smoothedValue = 1780;
 
 boolean serialConnected = false;
 boolean sensorDataReceived = false;
@@ -36,59 +36,61 @@ boolean sensorDataReceived = false;
 // --------------------------------------------------
 // Calibration
 // --------------------------------------------------
+
 // Fallback values based on recent readings.
 // Interactive calibration will replace these.
-float relaxedSensor0 = 1750;
-float stretchedSensor0 = 2050;
+float relaxedSensor = 1750;
+float stretchedSensor = 2050;
 
-boolean relaxedCalibrated0 = false;
-boolean stretchedCalibrated0 = false;
+boolean relaxedCalibrated = false;
+boolean stretchedCalibrated = false;
 
-boolean calibratingRelaxed0 = false;
-boolean calibratingStretched0 = false;
+boolean calibratingRelaxed = false;
+boolean calibratingStretched = false;
 
 int calibrationStartTime = 0;
 int calibrationDuration = 1500; // milliseconds
 
-float calibrationSum0 = 0;
-int calibrationSamples0 = 0;
+float calibrationSum = 0;
+int calibrationSamples = 0;
 
 // Margin added only during mapping/status checks
 float calibrationMargin = 3.0;
 
-
 // --------------------------------------------------
 // Observed range
 // --------------------------------------------------
-float observedMin0 = Float.MAX_VALUE;
-float observedMax0 = -Float.MAX_VALUE;
+
+float observedMin = Float.MAX_VALUE;
+float observedMax = -Float.MAX_VALUE;
 
 // --------------------------------------------------
 // Sound
 // --------------------------------------------------
-float minfreq0 = 100.0;
-float maxfreq0 = 1000.0;
 
-float normalized0 = 0.0;
-float freq0 = minfreq0;
+float minFreq = 100.0;
+float maxFreq = 1000.0;
 
-float amplitude0 = 0.2;
-float amplitude1 = 0.2;
+float normalized = 0.0;
+float freq = minFreq;
 
-boolean muted0 = false;
+float amplitude = 0.2;
+boolean muted = false;
 
 // --------------------------------------------------
 // Status
 // --------------------------------------------------
-String sensorStatus0 = "Sensor0 STATUS WAITING";
+
+String sensorStatus = "WAITING";
 
 /*
  * These store how far outside the calibrated
  * range the current smoothed reading is.
  */
-float amountBelow0 = 0;
-float amountAbove0 = 0;
 
+float amountBelow = 0;
+
+float amountAbove = 0;
 // --------------------------------------------------
 // Setup
 // --------------------------------------------------
@@ -117,6 +119,7 @@ void setup() {
     myPort.bufferUntil('\n');
 
     serialConnected = true;
+
     println("Connected to XIAO ESP32S3");
   }
   catch (Exception e) {
@@ -126,57 +129,53 @@ void setup() {
     println(e);
   }
 
-  sine0 = new SinOsc(this);
-  sine0.play();
-  sine0.amp(amplitude0);
-  
-  sine1 = new SinOsc(this);
-  sine1.play();
-  sine1.amp(amplitude1);
+  sine = new SinOsc(this);
+  sine.play();
+  sine.amp(amplitude);
 }
 
 // --------------------------------------------------
 // Main loop
 // --------------------------------------------------
+
 void draw() {
   background(0);
 
-  updateCalibration(0);
-  updatesensorStatus(0);
-  
-  updatePitch(0);
-  updateSound(0);
+  updateCalibration();
+  updateSensorStatus();
+  updatePitch();
+  updateSound();
 
-  drawInformation(0);
-  drawWaveform(freq0);
+  drawInformation();
+  drawWaveform(freq);
 }
 
 // --------------------------------------------------
 // Pitch mapping
 // --------------------------------------------------
 
-void updatePitch(int pin) {
+void updatePitch() {
   float calibrationRange =
-    stretchedSensor0 - relaxedSensor0;
+    stretchedSensor - relaxedSensor;
 
   if (abs(calibrationRange) < 0.001) {
-    normalized0 = 0.0;
+    normalized = 0.0;
   } else {
-    normalized0 =
-      (smoothedValue0 - relaxedSensor0) /
+    normalized =
+      (smoothedValue - relaxedSensor) /
       calibrationRange;
   }
 
-  normalized0 = constrain(
-    normalized0,
+  normalized = constrain(
+    normalized,
     0.0,
     1.0
   );
 
   // Exponential pitch mapping
-  freq0 = minfreq0 * pow(
-    maxfreq0 / minfreq0,
-    normalized0
+  freq = minFreq * pow(
+    maxFreq / minFreq,
+    normalized
   );
 }
 
@@ -184,13 +183,13 @@ void updatePitch(int pin) {
 // Sound
 // --------------------------------------------------
 
-void updateSound(int pin) {
-  sine0.freq0(freq0);
+void updateSound() {
+  sine.freq(freq);
 
-  if (muted0) {
-    sine0.amp(0.0);
+  if (muted) {
+    sine.amp(0.0);
   } else {
-    sine0.amp(amplitude0);
+    sine.amp(amplitude);
   }
 }
 
@@ -198,33 +197,33 @@ void updateSound(int pin) {
 // Status and range difference
 // --------------------------------------------------
 
-void updatesensorStatus(int pin) {
+void updateSensorStatus() {
   if (!sensorDataReceived) {
-    sensorStatus0 = "WAITING";
+    sensorStatus = "WAITING";
     return;
   }
 
   float calibratedMin =
-    min(relaxedSensor0, stretchedSensor0) -
+    min(relaxedSensor, stretchedSensor) -
     calibrationMargin;
 
   float calibratedMax =
-    max(relaxedSensor0, stretchedSensor0) +
+    max(relaxedSensor, stretchedSensor) +
     calibrationMargin;
 
-  if (smoothedValue0 < calibratedMin) {
-    sensorStatus0 = "BELOW MIN";
+  if (smoothedValue < calibratedMin) {
+    sensorStatus = "BELOW MIN";
     
-    amountBelow0 =
-      calibratedMin - smoothedValue0;
+    amountBelow =
+      calibratedMin - smoothedValue;
       
-  } else if (smoothedValue0 > calibratedMax) {
-    sensorStatus0 = "ABOVE MAX";
+  } else if (smoothedValue > calibratedMax) {
+    sensorStatus = "ABOVE MAX";
     
-    amountAbove0 =
-      smoothedValue0 - calibratedMax;
+    amountAbove =
+      smoothedValue - calibratedMax;
   } else {
-    sensorStatus0 = "OK";
+    sensorStatus = "OK";
   }
 }
 
@@ -285,22 +284,22 @@ void serialEvent(Serial p) {
       return;
     }
 
-    rawValue0 = newRaw;
-    smoothedValue0 = newSmoothed;
+    rawValue = newRaw;
+    smoothedValue = newSmoothed;
 
     sensorDataReceived = true;
 
     updateObservedRange();
-    updatesensorStatus0();
+    updateSensorStatus();
 
     // Collect calibration samples
-    if (calibratingRelaxed0 ||
-        calibratingStretched0) {
+    if (calibratingRelaxed ||
+        calibratingStretched) {
 
-      calibrationSum0 +=
-        smoothedValue0;
+      calibrationSum +=
+        smoothedValue;
 
-      calibrationSamples0++;
+      calibrationSamples++;
     }
 
     printSensorLog();
@@ -320,25 +319,25 @@ void serialEvent(Serial p) {
 
 void printSensorLog() {
   float calibratedMin =
-    min(relaxedSensor0, stretchedSensor0) -
+    min(relaxedSensor, stretchedSensor) -
     calibrationMargin;
 
   float calibratedMax =
-    max(relaxedSensor0, stretchedSensor0) +
+    max(relaxedSensor, stretchedSensor) +
     calibrationMargin;
 
   println(
     "RAW: " +
-    nf(rawValue0, 0, 1) +
+    nf(rawValue, 0, 1) +
 
     " | SMOOTH: " +
-    nf(smoothedValue0, 0, 2) +
+    nf(smoothedValue, 0, 2) +
 
     " | OBS MIN: " +
-    formatObservedValue(observedMin0) +
+    formatObservedValue(observedMin) +
 
     " | OBS MAX: " +
-    formatObservedValue(observedMax0) +
+    formatObservedValue(observedMax) +
 
     " | CAL MIN: " +
     nf(calibratedMin, 0, 2) +
@@ -347,7 +346,7 @@ void printSensorLog() {
     nf(calibratedMax, 0, 2) +
 
     " | STATUS: " +
-    sensorStatus0
+    sensorStatus
   );
 }
 
@@ -356,27 +355,27 @@ void printSensorLog() {
 // --------------------------------------------------
 
 void updateObservedRange() {
-  if (smoothedValue0 < observedMin0) {
-    observedMin0 = smoothedValue0;
+  if (smoothedValue < observedMin) {
+    observedMin = smoothedValue;
   }
 
-  if (smoothedValue0 > observedMax0) {
-    observedMax0 = smoothedValue0;
+  if (smoothedValue > observedMax) {
+    observedMax = smoothedValue;
   }
 }
 
 void resetObservedRange() {
   if (sensorDataReceived) {
-    observedMin0 = smoothedValue0;
-    observedMax0 = smoothedValue0;
+    observedMin = smoothedValue;
+    observedMax = smoothedValue;
 
     println(
       "Observed range reset at: " +
-      nf(smoothedValue0, 0, 2)
+      nf(smoothedValue, 0, 2)
     );
   } else {
-    observedMin0 = Float.MAX_VALUE;
-    observedMax0 = -Float.MAX_VALUE;
+    observedMin = Float.MAX_VALUE;
+    observedMax = -Float.MAX_VALUE;
 
     println(
       "Observed range reset. Waiting for sensor data."
@@ -398,10 +397,10 @@ void keyPressed() {
   }
 
   if (key == 'm' || key == 'M') {
-    muted0 = !muted0;
+    muted = !muted;
 
     println(
-      muted0 ? "muted0" : "Unmuted0"
+      muted ? "Muted" : "Unmuted"
     );
   }
 
@@ -426,15 +425,15 @@ void startRelaxedCalibration() {
     return;
   }
 
-  if (calibratingRelaxed0 ||
-      calibratingStretched0) {
+  if (calibratingRelaxed ||
+      calibratingStretched) {
     return;
   }
 
-  calibratingRelaxed0 = true;
+  calibratingRelaxed = true;
   calibrationStartTime = millis();
-  calibrationSum0 = 0;
-  calibrationSamples0 = 0;
+  calibrationSum = 0;
+  calibrationSamples = 0;
 
   println(
     "Calibrating relaxed position..."
@@ -449,24 +448,24 @@ void startStretchedCalibration() {
     return;
   }
 
-  if (calibratingRelaxed0 ||
-      calibratingStretched0) {
+  if (calibratingRelaxed ||
+      calibratingStretched) {
     return;
   }
 
-  calibratingStretched0 = true;
+  calibratingStretched = true;
   calibrationStartTime = millis();
-  calibrationSum0 = 0;
-  calibrationSamples0 = 0;
+  calibrationSum = 0;
+  calibrationSamples = 0;
 
   println(
     "Calibrating stretched position..."
   );
 }
 
-void updateCalibration(int pin) {
-  if (!calibratingRelaxed0 &&
-      !calibratingStretched0) {
+void updateCalibration() {
+  if (!calibratingRelaxed &&
+      !calibratingStretched) {
     return;
   }
 
@@ -477,64 +476,64 @@ void updateCalibration(int pin) {
     return;
   }
 
-  if (calibrationSamples0 == 0) {
+  if (calibrationSamples == 0) {
     println(
       "Calibration failed: no samples received."
     );
 
-    calibratingRelaxed0 = false;
-    calibratingStretched0 = false;
+    calibratingRelaxed = false;
+    calibratingStretched = false;
 
     return;
   }
 
   float measuredValue =
-    calibrationSum0 /
-    calibrationSamples0;
+    calibrationSum /
+    calibrationSamples;
 
-  if (calibratingRelaxed0) {
-    relaxedSensor0 = measuredValue;
-    relaxedCalibrated0 = true;
+  if (calibratingRelaxed) {
+    relaxedSensor = measuredValue;
+    relaxedCalibrated = true;
 
     println(
       "Relaxed value recorded: " +
-      nf(relaxedSensor0, 0, 2)
+      nf(relaxedSensor, 0, 2)
     );
   }
 
-  if (calibratingStretched0) {
-    stretchedSensor0 = measuredValue;
-    stretchedCalibrated0 = true;
+  if (calibratingStretched) {
+    stretchedSensor = measuredValue;
+    stretchedCalibrated = true;
 
     println(
       "Stretched value recorded: " +
-      nf(stretchedSensor0, 0, 2)
+      nf(stretchedSensor, 0, 2)
     );
   }
 
-  calibratingRelaxed0 = false;
-  calibratingStretched0 = false;
+  calibratingRelaxed = false;
+  calibratingStretched = false;
 
   println(
     "Current calibration: relaxed=" +
-    nf(relaxedSensor0, 0, 2) +
+    nf(relaxedSensor, 0, 2) +
     ", stretched=" +
-    nf(stretchedSensor0, 0, 2)
+    nf(stretchedSensor, 0, 2)
   );
 }
 
 void clearCalibration() {
-  relaxedSensor0 = 615;
-  stretchedSensor0 = 650;
+  relaxedSensor = 615;
+  stretchedSensor = 650;
 
-  relaxedCalibrated0 = false;
-  stretchedCalibrated0 = false;
+  relaxedCalibrated = false;
+  stretchedCalibrated = false;
 
-  calibratingRelaxed0 = false;
-  calibratingStretched0 = false;
+  calibratingRelaxed = false;
+  calibratingStretched = false;
 
-  calibrationSum0 = 0;
-  calibrationSamples0 = 0;
+  calibrationSum = 0;
+  calibrationSamples = 0;
 
   println(
     "Calibration reset to default values."
@@ -545,7 +544,7 @@ void clearCalibration() {
 // Display
 // --------------------------------------------------
 
-void drawInformation(int pin) {
+void drawInformation() {
   fill(255);
   textSize(18);
 
@@ -564,7 +563,7 @@ void drawInformation(int pin) {
 
   text(
     "RAW: " +
-    nf(rawValue0, 0, 1),
+    nf(rawValue, 0, 1),
     x,
     y
   );
@@ -573,7 +572,7 @@ void drawInformation(int pin) {
 
   text(
     "SMOOTH: " +
-    nf(smoothedValue0, 0, 2),
+    nf(smoothedValue, 0, 2),
     x,
     y
   );
@@ -582,7 +581,7 @@ void drawInformation(int pin) {
 
   text(
     "OBSERVED MIN: " +
-    formatObservedValue(observedMin0),
+    formatObservedValue(observedMin),
     x,
     y
   );
@@ -591,7 +590,7 @@ void drawInformation(int pin) {
 
   text(
     "OBSERVED MAX: " +
-    formatObservedValue(observedMax0),
+    formatObservedValue(observedMax),
     x,
     y
   );
@@ -600,7 +599,7 @@ void drawInformation(int pin) {
 
   text(
     "RELAXED: " +
-    nf(relaxedSensor0, 0, 2),
+    nf(relaxedSensor, 0, 2),
     x,
     y
   );
@@ -609,7 +608,7 @@ void drawInformation(int pin) {
 
   text(
     "STRETCHED: " +
-    nf(stretchedSensor0, 0, 2),
+    nf(stretchedSensor, 0, 2),
     x,
     y
   );
@@ -619,7 +618,7 @@ void drawInformation(int pin) {
   text(
     "CALIBRATED MIN: " +
     nf(
-      min(relaxedSensor0, stretchedSensor0) -
+      min(relaxedSensor, stretchedSensor) -
       calibrationMargin,
       0,
       2
@@ -633,7 +632,7 @@ void drawInformation(int pin) {
   text(
     "CALIBRATED MAX: " +
     nf(
-      max(relaxedSensor0, stretchedSensor0) +
+      max(relaxedSensor, stretchedSensor) +
       calibrationMargin,
       0,
       2
@@ -646,7 +645,7 @@ void drawInformation(int pin) {
 
   text(
     "STATUS: " +
-    sensorStatus0,
+    sensorStatus,
     x,
     y
   );
@@ -654,8 +653,8 @@ void drawInformation(int pin) {
   y += lineHeight;
 
   text(
-    "normalized0: " +
-    nf(normalized0, 0, 3),
+    "NORMALIZED: " +
+    nf(normalized, 0, 3),
     x,
     y
   );
@@ -663,8 +662,8 @@ void drawInformation(int pin) {
   y += lineHeight;
 
   text(
-    "freq0: " +
-    nf(freq0, 0, 1) +
+    "FREQ: " +
+    nf(freq, 0, 1) +
     " Hz",
     x,
     y
@@ -705,7 +704,7 @@ void drawInformation(int pin) {
   );
 
   // Calibration state
-  if (calibratingRelaxed0) {
+  if (calibratingRelaxed) {
     fill(255, 220, 0);
 
     text(
@@ -715,7 +714,7 @@ void drawInformation(int pin) {
     );
   }
 
-  if (calibratingStretched0) {
+  if (calibratingStretched) {
     fill(255, 220, 0);
 
     text(
@@ -726,7 +725,7 @@ void drawInformation(int pin) {
   }
 
   // Status warning
-  if (sensorStatus0.equals("BELOW MIN")) {
+  if (sensorStatus.equals("BELOW MIN")) {
     fill(255, 170, 0);
 
     text(
@@ -736,7 +735,7 @@ void drawInformation(int pin) {
     );
   }
 
-  if (sensorStatus0.equals("ABOVE MAX")) {
+  if (sensorStatus.equals("ABOVE MAX")) {
     fill(255, 100, 100);
 
     text(
@@ -746,11 +745,11 @@ void drawInformation(int pin) {
     );
   }
 
-  if (muted0) {
+  if (muted) {
     fill(255, 100, 100);
 
     text(
-      "muted0",
+      "MUTED",
       520,
       260
     );
@@ -770,16 +769,16 @@ String formatObservedValue(float value) {
 // Waveform
 // --------------------------------------------------
 
-void drawWaveform(float freq0uency) {
+void drawWaveform(float frequency) {
   stroke(255);
   noFill();
 
   beginShape();
 
   float cycles = map(
-    freq0uency,
-    minfreq0,
-    maxfreq0,
+    frequency,
+    minFreq,
+    maxFreq,
     1,
     30
   );
